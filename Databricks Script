@@ -1,0 +1,104 @@
+from pyspark.sql.functions import col
+from pyspark.sql.types import IntegerType, DoubleType, BooleanType, DateType
+df = spark.read.format("csv").option("header","true").option("inferSchema","true").load("/mnt/stockmarket/raw-data/meta-data/NIFTY50_all.csv")
+display(df)
+from pyspark.sql import functions as F
+df = df.withColumn("Symbol", F.when(df.Symbol == "MUNDRAPORT", "ADANIPORTS").otherwise(df.Symbol))
+df = df.withColumn("Symbol", F.when(df.Symbol == "UTIBANK", "AXISBANK").otherwise(df.Symbol))
+df = df.withColumn("Symbol", F.when(df.Symbol == "BAJAUTOFIN", "BAJFINANCE").otherwise(df.Symbol))
+df = df.withColumn("Symbol", F.when(df.Symbol == "BHARTI", "BHARTIARTL").otherwise(df.Symbol))
+df = df.withColumn("Symbol", F.when(df.Symbol == "HINDLEVER", "HINDUNILVR").otherwise(df.Symbol))
+df = df.withColumn("Symbol", F.when(df.Symbol == "INFOSYSTCH", "INFY").otherwise(df.Symbol))
+df = df.withColumn("Symbol", F.when(df.Symbol == "JSWSTL", "JSWSTEEL").otherwise(df.Symbol))
+df = df.withColumn("Symbol", F.when(df.Symbol == "KOTAKMAH", "KOTAKBANK").otherwise(df.Symbol))
+df = df.withColumn("Symbol", F.when(df.Symbol == "TELCO", "TATAMOTORS").otherwise(df.Symbol))
+df = df.withColumn("Symbol", F.when(df.Symbol == "TISCO", "TATASTEEL").otherwise(df.Symbol))
+df = df.withColumn("Symbol", F.when(df.Symbol == "UNIPHOS", "UPL").otherwise(df.Symbol))
+df = df.withColumn("Symbol", F.when(df.Symbol == "SESAGOA", "VEDL").otherwise(df.Symbol))
+df = df.withColumn("Symbol", F.when(df.Symbol == "SSLT", "VEDL").otherwise(df.Symbol))
+df = df.withColumn("Symbol", F.when(df.Symbol == "ZEETELE", "ZEEL").otherwise(df.Symbol))
+distinct_series = df.select("Symbol").distinct()
+
+distinct_series.count()
+#df.display()
+df = df.withColumnRenamed("Prev Close (Previous Close)", "Prev Close") \
+       .withColumnRenamed("VWAP (Volume Weighted Average Price)", "VWAP")
+
+df = df.withColumn("Daily Returns", ((df["Close"] - df["Prev Close"]) / df["Prev Close"]) * 100) \
+       .withColumn("Price Range", df["High"] - df["Low"]) \
+       .withColumn("Price Spread", df["Close"] - df["Open"]) \
+       .withColumn("Daily Price Change", df["Close"] - df["Prev Close"]) \
+       .withColumn("Average Price", (df["High"] + df["Low"] + df["Open"] + df["Close"]) / 4) \
+       .withColumn("Trading Range Percentage", ((((df["Close"] - df["Prev Close"]) / df["Prev Close"]) * 100)/((df["High"] + df["Low"] + df["Open"] + df["Close"]) / 4)) * 100)
+
+df.printSchema()
+display(df)
+#df.show()
+
+
+from pyspark.sql.functions import col
+
+df = df.withColumn('Volume', col('Volume').cast("double"))
+
+df.display()
+from pyspark.sql.functions import col, format_number
+
+columns_to_format = ['Prev Close','Open','High','Low','Last','Close','VWAP','Volume','Turnover','Trades','Deliverable Volume','%Deliverble','Daily Returns','Price Range','Price Spread','Daily Price Change','Average Price','Trading Range Percentage'] 
+
+df = df.withColumn('Prev Close', format_number(col('Prev Close'), 2)) \
+        .withColumn('Open', format_number(col('Open'), 2)) \
+        .withColumn('High', format_number(col('High'), 2)) \
+        .withColumn('Low', format_number(col('Low'), 2)) \
+        .withColumn('Last', format_number(col('Last'), 2)) \
+        .withColumn('Close', format_number(col('Close'), 2)) \
+        .withColumn('VWAP', format_number(col('VWAP'), 2)) \
+        .withColumn('Volume', format_number(col('Volume'), 2)) \
+        .withColumn('Turnover', format_number(col('Turnover'), 2)) \
+        .withColumn('Trades', format_number(col('Trades'), 2)) \
+        .withColumn('Deliverable Volume', format_number(col('Deliverable Volume'), 2)) \
+        .withColumn('%Deliverble', format_number(col('%Deliverble'), 2)) \
+        .withColumn('Daily Returns', format_number(col('Daily Returns'), 2)) \
+        .withColumn('Price Range', format_number(col('Price Range'), 2)) \
+        .withColumn('Price Spread', format_number(col('Price Spread'), 2)) \
+        .withColumn('Daily Price Change', format_number(col('Daily Price Change'), 2)) \
+        .withColumn('Average Price', format_number(col('Average Price'), 2)) \
+        .withColumn('Trading Range Percentage', format_number(col('Trading Range Percentage'), 2)) \
+
+df.display()
+metadata = spark.read.format("csv").option("header","true").option("inferSchema","true").load("/mnt/stockmarket/raw-data/meta-data/stock_metadata.csv")
+display(metadata)
+from pyspark.sql.functions import col
+
+selected_metadata = metadata.select("Symbol","Company Name","Industry","ISIN Code")
+
+final_df = df.join(selected_metadata, on='Symbol', how='left')
+
+final_df.display()
+
+final_df = final_df.withColumnRenamed("Company Name", "Company_Name") \
+       .withColumnRenamed("Deliverable Volume", "Deliverable_Volume") \
+       .withColumnRenamed("Daily Returns", "Daily_Returns") \
+       .withColumnRenamed("Price Range", "Price_Range") \
+       .withColumnRenamed("Price Spread", "Price_Spread") \
+       .withColumnRenamed("Daily Price Change", "Daily_Price_Change") \
+       .withColumnRenamed("Trading Range Percentage", "Trading_Range_Percentage") \
+       .withColumnRenamed("Average Price", "Average_Price") \
+       .withColumnRenamed("Prev Close", "Prev_Close") \
+       .withColumnRenamed("ISIN Code", "ISIN_Code") \
+       .withColumnRenamed("%Deliverble", "Deliverable_Percentage")
+
+display(final_df)
+from pyspark.sql.functions import year
+
+final_df = final_df.withColumn("Year", year(final_df["Date"]))
+
+final_df.display()
+new_column_order = ['Company_Name','Symbol','Industry','ISIN_Code','Series','Date','Year','Prev_Close','Open','High','Low','Last','Close','VWAP','Volume','Turnover','Trades','Deliverable_Volume','Deliverable_Percentage','Daily_Returns','Price_Range','Price_Spread','Daily_Price_Change','Average_Price','Trading_Range_Percentage']
+
+final_df = final_df.select(*new_column_order)
+
+final_df.display()
+
+df_single_partition = final_df.coalesce(1)
+adls_path = "/mnt/stockmarket/transformed-data/stock-analysis"
+df_single_partition.write.mode("overwrite").option("header", "true").csv(adls_path)
